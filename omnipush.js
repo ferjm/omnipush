@@ -123,7 +123,7 @@ function modifyFiles(callback) {
 
   // TODO: get a list of defines from json file
   var args = [preprocessorPy, '-o', file.dest, destTmp];
-  args.push(defaultDefines);
+  args.concat(defaultDefines);
   var preprocessor = spawn('python', args);
   preprocessor.on('close', function() {
     fs.unlinkSync(omniDir + '/' + destTmp);
