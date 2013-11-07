@@ -11,6 +11,7 @@ var sys = require('sys'),
     spawn = require('child_process').spawn,
     fs = require('fs');
 
+var geckoPath = process.env.GECKO_PATH;
 var preprocessorPy = geckoPath + '/js/src/config/Preprocessor.py';
 var omniDir;
 var filesToPush = [];
@@ -122,8 +123,10 @@ function modifyFiles(callback) {
   console.log('Preprocessing ' + destTmp);
 
   // TODO: get a list of defines from json file
-  var args = [preprocessorPy, '-o', file.dest, destTmp];
-  args.concat(defaultDefines);
+  var args = [preprocessorPy, '-o', file.dest];
+  args = args.concat(defaultDefines);
+  args.push(destTmp);
+  console.log("args " + args);
   var preprocessor = spawn('python', args);
   preprocessor.on('close', function() {
     fs.unlinkSync(omniDir + '/' + destTmp);
@@ -137,7 +140,6 @@ function modifyFiles(callback) {
 
 //---
 
-var geckoPath = process.env.GECKO_PATH;
 if (!geckoPath) onError('No GECKO_PATH found');
 
 try {
