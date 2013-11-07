@@ -126,7 +126,6 @@ function modifyFiles(callback) {
   var args = [preprocessorPy, '-o', file.dest];
   args = args.concat(defaultDefines);
   args.push(destTmp);
-  console.log("args " + args);
   var preprocessor = spawn('python', args);
   preprocessor.on('close', function() {
     fs.unlinkSync(omniDir + '/' + destTmp);
