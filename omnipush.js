@@ -6,16 +6,20 @@
 'use strict';
 
 var sys = require('sys'),
-  exec = require('child_process').exec,
-  path = require('path'),
-  spawn = require('child_process').spawn,
-  fs = require('fs');
+    exec = require('child_process').exec,
+    path = require('path'),
+    spawn = require('child_process').spawn,
+    fs = require('fs');
 
-//TODO: get m-c from envvar
-var mc = '/ssd/dev/mozilla/mozilla-inbound';
-var preprocessorPy = mc + '/js/src/config/Preprocessor.py';
+var preprocessorPy = geckoPath + '/js/src/config/Preprocessor.py';
 var omniDir;
 var filesToPush = [];
+// TODO get a list of defines to override the default ones.
+var defaultDefines = ['-D', 'MOZ_B2G',
+                      '-D', 'MOZ_WIDGET_GONK',
+                      '-D', 'MOZ_CAPTIVEDETECT',
+                      '-D', 'MOZ_B2G_RIL',
+                      '-D', 'MOZ_B2G_BT'];
 
 function onError(err) {
   console.log(err);
@@ -25,57 +29,56 @@ function onError(err) {
 function clasifyFiles(files, callback) {
   if (!files.length) return callback();
 
-  var stdin = process.stdin, stdout = process.stdout;
-  stdin.resume();
-
   var file = path.normalize(files.pop()).trim();
-  stdout.write('Is ' + file + ' a component(c) or a module(m)? ');
+  var name = path.basename(file);
+  var dest;
+  if (fs.existsSync('components/' + name)) {
+    dest = 'components/' + name;
+  } else if(fs.existsSync('modules/' + name)) {
+    dest = 'modules/' + name;
+  } else if(fs.existsSync('chrome/chrome/content/' + name)) {
+    dest = 'chrome/chrome/content' + name;
+  } else {
+    onError('Cannot find type for ' + name);
+  }
 
-  stdin.once('data', function(data) {
-    data = data.toString().trim();
-
-    if (data === 'c' || data === 'm') {
-      filesToPush.push({
-        path: file,
-        name: path.basename(file),
-        type: data
-      });
-    } else {
-      stdout.write('\nEnter c or m, please\n');
-    }
-    clasifyFiles(files, callback);
+  filesToPush.push({
+    orig: file,
+    dest: dest
   });
+
+  clasifyFiles(files, callback);
 }
 
 function pullAndUnzipOmniJa(callback) {
-  omniDir = 'omni' + Date.now();
-  fs.mkdir('/tmp/', omniDir, 0755, function(err) {
+  omniDir = '/tmp/omni' + Date.now();
+  fs.mkdir(omniDir, parseInt('0755', 8), function(err) {
     if (err) {
       console.log('mkdir: ' + err);
       process.exit(1);
     }
-  });
 
-  try {
-    process.chdir(omniDir);
-  } catch (err) {
-    console.log('chdir: ' + err);
-    process.exit(1);
-  }
-
-  console.log('Getting omni.ja...');
-  exec('adb pull /system/b2g/omni.ja ', function(error) {
-    if (error) {
-      console.log(error);
+    try {
+      process.chdir(omniDir);
+    } catch (err) {
+      console.log('-chdir: ' + omniDir + ' ' + err);
       process.exit(1);
     }
 
-    console.log('Unzip omni.ja...');
-    var unzip = spawn('unzip', ['omni.ja']);
-    unzip.stderr.on('data', function(data) {});
-    unzip.on('close', function() {
-      console.log('Successfully unzipped');
-      callback(omniDir);
+    console.log('Getting omni.ja...');
+    exec('adb pull /system/b2g/omni.ja ', function(error) {
+      if (error) {
+        console.log(error);
+        process.exit(1);
+      }
+
+      console.log('Unzip omni.ja...');
+      var unzip = spawn('unzip', ['omni.ja']);
+      unzip.stderr.on('data', function(data) {});
+      unzip.on('close', function() {
+        console.log('Successfully unzipped');
+        callback(omniDir);
+      });
     });
   });
 }
@@ -91,7 +94,7 @@ function adbRemount(callback) {
 
 function zipAndPushOmniJa(callback) {
   console.log('Zipping omni.ja');
-  fs.unlinkSync('/tmp/' + omniDir + '/omni.ja');
+  fs.unlinkSync(omniDir + '/omni.ja');
   var zip = spawn('zip', ['-r', 'omni.ja', '.']);
   zip.stderr.on('data', function(data) {});
   zip.on('close', function() {
@@ -111,20 +114,19 @@ function zipAndPushOmniJa(callback) {
 
 function modifyFiles(callback) {
   var file = filesToPush.pop();
-  var dest = (file.type == 'c') ? 'components/' : 'modules/';
-  dest += file.name;
-  var destTmp = dest + '.toprocess';
-  var orig = mc + '/' + file.path;
+  var destTmp = file.dest + '.toprocess';
+  var orig = geckoPath + '/' + file.orig;
   console.log('Copy ' + orig + ' in ' + destTmp);
   fs.createReadStream(orig).pipe(fs.createWriteStream(destTmp));
 
   console.log('Preprocessing ' + destTmp);
 
   // TODO: get a list of defines from json file
-  var preprocessor = spawn('python', [preprocessorPy, '-o', dest, '-D',
-    'MOZ_WIDGET_GONK', destTmp]);
+  var args = [preprocessorPy, '-o', file.dest, destTmp];
+  args.push(defaultDefines);
+  var preprocessor = spawn('python', args);
   preprocessor.on('close', function() {
-    fs.unlinkSync('/tmp/' + omniDir + '/' + destTmp);
+    fs.unlinkSync(omniDir + '/' + destTmp);
     if (!filesToPush.length) {
       callback();
       return;
@@ -135,8 +137,11 @@ function modifyFiles(callback) {
 
 //---
 
+var geckoPath = process.env.GECKO_PATH;
+if (!geckoPath) onError('No GECKO_PATH found');
+
 try {
-  process.chdir(mc);
+  process.chdir(geckoPath);
 }
 catch (err) {
   console.log('chdir: ' + err);
@@ -154,15 +159,13 @@ exec('hg status', function(error, stdout, stderr) {
   files[files.length - 1] = last[0];
   files.shift();
 
-  sys.print(stdout);
-
   if (!files.length) {
     console.log('No changes found');
     process.exit();
   }
 
-  clasifyFiles(files, function() {
-    pullAndUnzipOmniJa(function() {
+  pullAndUnzipOmniJa(function() {
+    clasifyFiles(files, function() {
       modifyFiles(function() {
         adbShell('stop b2g', function(err) {
           if (err) return onError(err);
