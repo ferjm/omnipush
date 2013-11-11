@@ -38,7 +38,7 @@ function clasifyFiles(files, callback) {
   } else if(fs.existsSync('modules/' + name)) {
     dest = 'modules/' + name;
   } else if(fs.existsSync('chrome/chrome/content/' + name)) {
-    dest = 'chrome/chrome/content' + name;
+    dest = 'chrome/chrome/content/' + name;
   } else {
     onError('Cannot find type for ' + name);
   }
