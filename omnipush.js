@@ -12,7 +12,7 @@ var sys = require('sys'),
     fs = require('fs');
 
 var geckoPath = process.env.GECKO_PATH;
-var preprocessorPy = geckoPath + '/js/src/config/Preprocessor.py';
+var preprocessorPy = geckoPath + '/python/mozbuild/mozbuild/preprocessor.py';
 var omniDir;
 var filesToPush = [];
 // TODO get a list of defines to override the default ones.
