@@ -74,9 +74,7 @@ function pullAndUnzipOmniJa(callback) {
       }
 
       console.log('Unzip omni.ja...');
-      var unzip = spawn('unzip', ['omni.ja']);
-      unzip.stderr.on('data', function(data) {});
-      unzip.on('close', function() {
+      exec('unzip omni.ja', function() {
         console.log('Successfully unzipped');
         callback(omniDir);
       });
@@ -96,9 +94,11 @@ function adbRemount(callback) {
 function zipAndPushOmniJa(callback) {
   console.log('Zipping omni.ja');
   fs.unlinkSync(omniDir + '/omni.ja');
-  var zip = spawn('zip', ['-r', 'omni.ja', '.']);
-  zip.stderr.on('data', function(data) {});
-  zip.on('close', function() {
+  exec('zip -r omni.ja .', function(err) {
+    if (err) {
+      console.log('zip: ' + err);
+      process.exit(1);
+    }
     console.log('Successfully zipped');
     console.log('Pushing omni.ja...');
     adbRemount(function(err) {
